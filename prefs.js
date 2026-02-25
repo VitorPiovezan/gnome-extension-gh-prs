@@ -26,6 +26,8 @@ const I18N = {
     actionsHoursDesc: 'Mostrar runs das ultimas N horas',
     actionsRepos: 'Repositorios',
     actionsReposDesc: 'Separados por virgula (ex: org/repo1, org/repo2)',
+    actionsOnlyMine: 'Somente minhas actions',
+    actionsOnlyMineDesc: 'Mostrar apenas runs disparados por voce',
     groupWorkflows: 'Filtro de Workflows',
     loadWorkflows: 'Carregar workflows disponiveis',
     noWorkflows: 'Adicione repos e clique em carregar',
@@ -52,6 +54,8 @@ const I18N = {
     actionsHoursDesc: 'Show runs from the last N hours',
     actionsRepos: 'Repositories',
     actionsReposDesc: 'Comma-separated (e.g. org/repo1, org/repo2)',
+    actionsOnlyMine: 'Only my actions',
+    actionsOnlyMineDesc: 'Show only runs triggered by you',
     groupWorkflows: 'Workflow Filter',
     loadWorkflows: 'Load available workflows',
     noWorkflows: 'Add repos above and click load',
@@ -148,6 +152,13 @@ export default class GhPrPreferences extends ExtensionPreferences {
     });
     settings.bind('actions-hours-ago', hoursRow, 'value', 0);
     actionsGroup.add(hoursRow);
+
+    const onlyMineRow = new Adw.SwitchRow({
+      title: t.actionsOnlyMine,
+      subtitle: t.actionsOnlyMineDesc,
+    });
+    settings.bind('actions-only-mine', onlyMineRow, 'active', 0);
+    actionsGroup.add(onlyMineRow);
 
     const reposRow = new Adw.EntryRow({
       title: t.actionsRepos,

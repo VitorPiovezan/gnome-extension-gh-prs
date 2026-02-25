@@ -17,6 +17,9 @@ const I18N = {
     loading: 'Carregando...',
     noRepos: 'Configure repos nas preferencias',
     noRuns: 'Nenhum run recente',
+    refresh: 'Atualizar',
+    onlyMine: 'Somente minhas',
+    allActions: 'Todas as actions',
   },
   'en': {
     opened: 'Opened by me',
@@ -26,6 +29,9 @@ const I18N = {
     loading: 'Loading...',
     noRepos: 'Set up repos in preferences',
     noRuns: 'No recent runs',
+    refresh: 'Refresh',
+    onlyMine: 'Only mine',
+    allActions: 'All actions',
   },
 };
 
@@ -246,6 +252,33 @@ const GhPrIndicator = GObject.registerClass(
       if (!showMy && !showReview && !showActions) {
         this._addSection(t.none);
       }
+
+      const footerSep = new PopupMenu.PopupSeparatorMenuItem();
+      this.menu.addMenuItem(footerSep);
+      this._dynamicItems.push(footerSep);
+
+      if (showActions) {
+        const onlyMine = this._settings.get_boolean('actions-only-mine');
+        const toggleLabel = onlyMine ? t.onlyMine : t.allActions;
+        const toggleItem = new PopupMenu.PopupMenuItem(`\u25C9 ${toggleLabel}`, { reactive: true });
+        toggleItem.connect('activate', () => {
+          this._settings.set_boolean('actions-only-mine', !onlyMine);
+          this._hasCache = false;
+          this._onMenuOpen();
+          return true;
+        });
+        this.menu.addMenuItem(toggleItem);
+        this._dynamicItems.push(toggleItem);
+      }
+
+      const refreshItem = new PopupMenu.PopupMenuItem(t.refresh, { reactive: true });
+      refreshItem.connect('activate', () => {
+        this._hasCache = false;
+        this._onMenuOpen();
+        return true;
+      });
+      this.menu.addMenuItem(refreshItem);
+      this._dynamicItems.push(refreshItem);
     }
 
     _onMenuOpen() {
@@ -337,7 +370,7 @@ const GhPrIndicator = GObject.registerClass(
       const ghPath = this._settings.get_string('gh-path');
       const hoursAgo = this._settings.get_int('actions-hours-ago');
       const cutoff = new Date(Date.now() - hoursAgo * 3600 * 1000);
-      const limit = this._settings.get_int('max-items').toString();
+      const maxDisplay = this._settings.get_int('max-items');
 
       let workflowConfig;
       try {
@@ -346,7 +379,9 @@ const GhPrIndicator = GObject.registerClass(
         workflowConfig = {};
       }
 
-      this._ensureUsername((username) => {
+      const onlyMine = this._settings.get_boolean('actions-only-mine');
+
+      const doFetch = (username) => {
         if (currentFetch !== this._fetchId) return;
 
         let pending = repos.length;
@@ -356,9 +391,9 @@ const GhPrIndicator = GObject.registerClass(
           const args = [
             'run', 'list', '-R', repo,
             '--json', 'status,conclusion,displayTitle,createdAt,url,workflowName',
-            '--limit', limit,
+            '--limit', '200',
           ];
-          if (username) args.push('--user', username);
+          if (onlyMine && username) args.push('--user', username);
 
           runGhAsync(ghPath, args, (stdout) => {
             const runs = parseJson(stdout);
@@ -377,11 +412,17 @@ const GhPrIndicator = GObject.registerClass(
 
             if (pending === 0) {
               allRuns.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-              callback(allRuns);
+              callback(allRuns.slice(0, maxDisplay));
             }
           });
         });
-      });
+      };
+
+      if (onlyMine) {
+        this._ensureUsername(doFetch);
+      } else {
+        doFetch(null);
+      }
     }
   }
 );

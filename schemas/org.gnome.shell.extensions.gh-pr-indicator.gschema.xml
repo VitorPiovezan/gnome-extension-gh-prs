@@ -46,6 +46,11 @@
       <summary>Comma-separated repositories to monitor for actions</summary>
     </key>
 
+    <key name="actions-only-mine" type="b">
+      <default>true</default>
+      <summary>Show only actions triggered by me</summary>
+    </key>
+
     <key name="actions-workflows" type="s">
       <default>'{}'</default>
       <summary>JSON mapping of repo to workflow name visibility</summary>
