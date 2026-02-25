@@ -22,6 +22,9 @@ const I18N = {
     allActions: 'Todas as actions',
     now: 'agora',
     steps: 'steps',
+    runs: 'Runs',
+    running: 'Running',
+    failed: 'Failed',
   },
   'en': {
     opened: 'Opened by me',
@@ -36,6 +39,9 @@ const I18N = {
     allActions: 'All actions',
     now: 'now',
     steps: 'steps',
+    runs: 'Runs',
+    running: 'Running',
+    failed: 'Failed',
   },
 };
 
@@ -313,7 +319,12 @@ const GhPrIndicator = GObject.registerClass(
         } else if (actions.length === 0) {
           this._addEmptyRow(t.noRuns);
         } else {
-          this._renderActionsGrouped(actions);
+          const collapsed = this._settings.get_boolean('actions-collapsed');
+          if (collapsed) {
+            this._renderActionsCollapsed(actions);
+          } else {
+            this._renderActionsGrouped(actions);
+          }
         }
       }
 
@@ -361,6 +372,78 @@ const GhPrIndicator = GObject.registerClass(
           this._addWorkflowHeader(wf);
           grouped[repo][wf].forEach(run => this._addActionRow(run));
         });
+      });
+    }
+
+    _renderActionsCollapsed(actions) {
+      const byRepo = {};
+      actions.forEach(run => {
+        if (!byRepo[run.repo]) byRepo[run.repo] = [];
+        byRepo[run.repo].push(run);
+      });
+
+      const repoKeys = Object.keys(byRepo).sort();
+      repoKeys.forEach(repo => {
+        const runs = byRepo[repo];
+        runs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const latest = runs[0];
+
+        let successCount = 0;
+        let runningCount = 0;
+        let failedCount = 0;
+
+        runs.forEach(r => {
+          if (r.status === 'in_progress') {
+            runningCount++;
+          } else if (r.status === 'completed') {
+            if (r.conclusion === 'success') successCount++;
+            else if (r.conclusion === 'failure' || r.conclusion === 'timed_out' || r.conclusion === 'startup_failure') failedCount++;
+          } else if (r.status === 'queued' || r.status === 'waiting' || r.status === 'pending' || r.status === 'requested') {
+            runningCount++;
+          }
+        });
+
+        const item = new PopupMenu.PopupBaseMenuItem({ reactive: true });
+        const box = new St.BoxLayout({ vertical: true, x_expand: true });
+
+        const topRow = new St.BoxLayout({ vertical: false, x_expand: true });
+        const dot = new St.Label({ text: '\u25CF ' });
+        dot.set_style(`color: ${getStatusColor(latest)};`);
+        topRow.add_child(dot);
+
+        const repoLabel = new St.Label({ text: repo, x_expand: true });
+        repoLabel.set_style('font-weight: bold;');
+        topRow.add_child(repoLabel);
+
+        const timeLabel = new St.Label({ text: timeAgo(latest.createdAt) });
+        timeLabel.set_style('color: #888; font-size: 0.85em;');
+        topRow.add_child(timeLabel);
+
+        box.add_child(topRow);
+
+        const statsRow = new St.BoxLayout({ vertical: false, x_expand: true });
+        statsRow.set_style('padding-left: 16px; padding-top: 2px;');
+
+        const runsLabel = new St.Label({ text: `${t.runs} ${successCount}` });
+        runsLabel.set_style('font-size: 0.8em; color: #3fb950; margin-right: 12px;');
+        statsRow.add_child(runsLabel);
+
+        const runningLabel = new St.Label({ text: `${t.running} ${runningCount}` });
+        runningLabel.set_style('font-size: 0.8em; color: #9e9e9e; margin-right: 12px;');
+        statsRow.add_child(runningLabel);
+
+        const failedLabel = new St.Label({ text: `${t.failed} ${failedCount}` });
+        failedLabel.set_style('font-size: 0.8em; color: #f85149;');
+        statsRow.add_child(failedLabel);
+
+        box.add_child(statsRow);
+
+        item.add_child(box);
+        item.connect('activate', () => {
+          if (latest.url) Gio.AppInfo.launch_default_for_uri(latest.url, null);
+        });
+        this._scrollSection.addMenuItem(item);
+        this._dynamicItems.push(item);
       });
     }
 

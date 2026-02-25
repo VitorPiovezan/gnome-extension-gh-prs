@@ -56,5 +56,10 @@
       <summary>JSON mapping of repo to workflow name visibility</summary>
     </key>
 
+    <key name="actions-collapsed" type="b">
+      <default>false</default>
+      <summary>Show actions in collapsed view (grouped by repo)</summary>
+    </key>
+
   </schema>
 </schemalist>

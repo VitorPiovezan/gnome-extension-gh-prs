@@ -28,6 +28,8 @@ const I18N = {
     actionsReposDesc: 'Separados por virgula (ex: org/repo1, org/repo2)',
     actionsOnlyMine: 'Somente minhas actions',
     actionsOnlyMineDesc: 'Mostrar apenas runs disparados por voce',
+    actionsCollapsed: 'Visao colapsada',
+    actionsCollapsedDesc: 'Agrupar actions por repositorio',
     groupWorkflows: 'Filtro de Workflows',
     loadWorkflows: 'Carregar workflows disponiveis',
     noWorkflows: 'Adicione repos e clique em carregar',
@@ -56,6 +58,8 @@ const I18N = {
     actionsReposDesc: 'Comma-separated (e.g. org/repo1, org/repo2)',
     actionsOnlyMine: 'Only my actions',
     actionsOnlyMineDesc: 'Show only runs triggered by you',
+    actionsCollapsed: 'Collapsed view',
+    actionsCollapsedDesc: 'Group actions by repository',
     groupWorkflows: 'Workflow Filter',
     loadWorkflows: 'Load available workflows',
     noWorkflows: 'Add repos above and click load',
@@ -159,6 +163,13 @@ export default class GhPrPreferences extends ExtensionPreferences {
     });
     settings.bind('actions-only-mine', onlyMineRow, 'active', 0);
     actionsGroup.add(onlyMineRow);
+
+    const collapsedRow = new Adw.SwitchRow({
+      title: t.actionsCollapsed,
+      subtitle: t.actionsCollapsedDesc,
+    });
+    settings.bind('actions-collapsed', collapsedRow, 'active', 0);
+    actionsGroup.add(collapsedRow);
 
     const reposRow = new Adw.EntryRow({
       title: t.actionsRepos,
