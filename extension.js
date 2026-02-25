@@ -107,7 +107,26 @@ const GhPrIndicator = GObject.registerClass(
       this.menu.addMenuItem(this._header);
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+      this._scrollSection = new PopupMenu.PopupMenuSection();
+      const monitor = Main.layoutManager.primaryMonitor;
+      const maxH = Math.floor(monitor.height * 0.6);
+      this._scrollView = new St.ScrollView({
+        hscrollbar_policy: St.PolicyType.NEVER,
+        vscrollbar_policy: St.PolicyType.AUTOMATIC,
+        overlay_scrollbars: true,
+        style: `max-height: ${maxH}px;`,
+      });
+      this._scrollView.add_child(this._scrollSection.actor);
+
+      const scrollContainer = new PopupMenu.PopupMenuSection();
+      scrollContainer.actor.add_child(this._scrollView);
+      this.menu.addMenuItem(scrollContainer);
+
+      this._footerSep = new PopupMenu.PopupSeparatorMenuItem();
+      this.menu.addMenuItem(this._footerSep);
+
       this._dynamicItems = [];
+      this._footerItems = [];
       this._applyMenuWidth();
 
       this._menuOpenId = this.menu.connect('open-state-changed', (_menu, isOpen) => {
@@ -137,12 +156,26 @@ const GhPrIndicator = GObject.registerClass(
     _clearDynamic() {
       this._dynamicItems.forEach(item => item.destroy());
       this._dynamicItems = [];
+      this._footerItems.forEach(item => item.destroy());
+      this._footerItems = [];
     }
 
     _addSection(title) {
       const item = new PopupMenu.PopupMenuItem(title, { reactive: false });
       item.label.add_style_class_name('gh-pr-section');
-      this.menu.addMenuItem(item);
+      this._scrollSection.addMenuItem(item);
+      this._dynamicItems.push(item);
+    }
+
+    _addSeparator() {
+      const sep = new PopupMenu.PopupSeparatorMenuItem();
+      this._scrollSection.addMenuItem(sep);
+      this._dynamicItems.push(sep);
+    }
+
+    _addEmptyRow(text) {
+      const item = new PopupMenu.PopupMenuItem(text, { reactive: false });
+      this._scrollSection.addMenuItem(item);
       this._dynamicItems.push(item);
     }
 
@@ -158,37 +191,44 @@ const GhPrIndicator = GObject.registerClass(
       item.connect('activate', () => {
         if (item._url) Gio.AppInfo.launch_default_for_uri(item._url, null);
       });
-      this.menu.addMenuItem(item);
+      this._scrollSection.addMenuItem(item);
+      this._dynamicItems.push(item);
+    }
+
+    _addRepoHeader(repoName) {
+      const item = new PopupMenu.PopupMenuItem(repoName, { reactive: false });
+      item.label.set_style('font-weight: bold; font-size: 0.95em;');
+      this._scrollSection.addMenuItem(item);
+      this._dynamicItems.push(item);
+    }
+
+    _addWorkflowHeader(name) {
+      const item = new PopupMenu.PopupMenuItem(name, { reactive: false });
+      item.label.set_style('font-size: 0.9em; color: #aaa; padding-left: 12px;');
+      this._scrollSection.addMenuItem(item);
       this._dynamicItems.push(item);
     }
 
     _addActionRow(run) {
       const item = new PopupMenu.PopupBaseMenuItem({ reactive: true });
-      const box = new St.BoxLayout({ vertical: true, x_expand: true });
+      const box = new St.BoxLayout({ vertical: false, x_expand: true });
 
-      const titleBox = new St.BoxLayout({ vertical: false });
-      const dot = new St.Label({ text: '\u25CF ' });
+      const dot = new St.Label({ text: '  \u25CF ' });
       dot.set_style(`color: ${getStatusColor(run)};`);
-      titleBox.add_child(dot);
+      box.add_child(dot);
 
-      const maxChar = Math.floor(this._settings.get_int('menu-width') / 7.5);
+      const maxChar = Math.floor(this._settings.get_int('menu-width') / 7.5) - 6;
       const titleText = (run.displayTitle || '').trim();
-      const shortTitle = titleText.length > maxChar - 4
-        ? titleText.substring(0, maxChar - 7) + '...'
+      const shortTitle = titleText.length > maxChar
+        ? titleText.substring(0, maxChar - 3) + '...'
         : titleText;
-      titleBox.add_child(new St.Label({ text: shortTitle, x_expand: true }));
-      box.add_child(titleBox);
-
-      const sub = `${run.repo} \u2022 ${run.workflowName}`;
-      const subLabel = new St.Label({ text: sub });
-      subLabel.set_style('font-size: 0.85em; color: #888; padding-left: 14px;');
-      box.add_child(subLabel);
+      box.add_child(new St.Label({ text: shortTitle, x_expand: true }));
 
       item.add_child(box);
       item.connect('activate', () => {
         if (run.url) Gio.AppInfo.launch_default_for_uri(run.url, null);
       });
-      this.menu.addMenuItem(item);
+      this._scrollSection.addMenuItem(item);
       this._dynamicItems.push(item);
     }
 
@@ -202,9 +242,7 @@ const GhPrIndicator = GObject.registerClass(
       if (showMy) {
         this._addSection(t.opened);
         if (myPrs.length === 0) {
-          const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
-          this.menu.addMenuItem(none);
-          this._dynamicItems.push(none);
+          this._addEmptyRow(t.none);
         } else {
           myPrs.forEach(pr => this._addPrRow(pr));
         }
@@ -212,16 +250,10 @@ const GhPrIndicator = GObject.registerClass(
       }
 
       if (showReview) {
-        if (hasPrev) {
-          const sep = new PopupMenu.PopupSeparatorMenuItem();
-          this.menu.addMenuItem(sep);
-          this._dynamicItems.push(sep);
-        }
+        if (hasPrev) this._addSeparator();
         this._addSection(t.review);
         if (reviewPrs.length === 0) {
-          const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
-          this.menu.addMenuItem(none);
-          this._dynamicItems.push(none);
+          this._addEmptyRow(t.none);
         } else {
           reviewPrs.forEach(pr => this._addPrRow(pr));
         }
@@ -229,33 +261,21 @@ const GhPrIndicator = GObject.registerClass(
       }
 
       if (showActions) {
-        if (hasPrev) {
-          const sep = new PopupMenu.PopupSeparatorMenuItem();
-          this.menu.addMenuItem(sep);
-          this._dynamicItems.push(sep);
-        }
+        if (hasPrev) this._addSeparator();
         this._addSection(t.actions);
-        const repos = this._settings.get_string('actions-repos').trim();
-        if (!repos) {
-          const none = new PopupMenu.PopupMenuItem(t.noRepos, { reactive: false });
-          this.menu.addMenuItem(none);
-          this._dynamicItems.push(none);
+        const reposSetting = this._settings.get_string('actions-repos').trim();
+        if (!reposSetting) {
+          this._addEmptyRow(t.noRepos);
         } else if (actions.length === 0) {
-          const none = new PopupMenu.PopupMenuItem(t.noRuns, { reactive: false });
-          this.menu.addMenuItem(none);
-          this._dynamicItems.push(none);
+          this._addEmptyRow(t.noRuns);
         } else {
-          actions.forEach(run => this._addActionRow(run));
+          this._renderActionsGrouped(actions);
         }
       }
 
       if (!showMy && !showReview && !showActions) {
         this._addSection(t.none);
       }
-
-      const footerSep = new PopupMenu.PopupSeparatorMenuItem();
-      this.menu.addMenuItem(footerSep);
-      this._dynamicItems.push(footerSep);
 
       if (showActions) {
         const onlyMine = this._settings.get_boolean('actions-only-mine');
@@ -268,7 +288,7 @@ const GhPrIndicator = GObject.registerClass(
           return true;
         });
         this.menu.addMenuItem(toggleItem);
-        this._dynamicItems.push(toggleItem);
+        this._footerItems.push(toggleItem);
       }
 
       const refreshItem = new PopupMenu.PopupMenuItem(t.refresh, { reactive: true });
@@ -278,7 +298,27 @@ const GhPrIndicator = GObject.registerClass(
         return true;
       });
       this.menu.addMenuItem(refreshItem);
-      this._dynamicItems.push(refreshItem);
+      this._footerItems.push(refreshItem);
+    }
+
+    _renderActionsGrouped(actions) {
+      const grouped = {};
+      actions.forEach(run => {
+        if (!grouped[run.repo]) grouped[run.repo] = {};
+        if (!grouped[run.repo][run.workflowName]) grouped[run.repo][run.workflowName] = [];
+        grouped[run.repo][run.workflowName].push(run);
+      });
+
+      const repoKeys = Object.keys(grouped).sort();
+      repoKeys.forEach((repo, ri) => {
+        if (ri > 0) this._addSeparator();
+        this._addRepoHeader(repo);
+        const wfKeys = Object.keys(grouped[repo]).sort();
+        wfKeys.forEach(wf => {
+          this._addWorkflowHeader(wf);
+          grouped[repo][wf].forEach(run => this._addActionRow(run));
+        });
+      });
     }
 
     _onMenuOpen() {
