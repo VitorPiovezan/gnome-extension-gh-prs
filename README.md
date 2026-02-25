@@ -10,7 +10,8 @@ Indicador no header que lista suas PRs abertas e as pendentes de revisao. Sincro
 ## Instalacao
 
 ```bash
-cp -r /home/vitorpiovezan/Documentos/gnome-extensions/gh-pr-indicator ~/.local/share/gnome-shell/extensions/gh-pr-indicator@local
+git clone https://github.com/VitorPiovezan/gnome-extension-gh-prs.git
+cp -r gnome-extension-gh-prs ~/.local/share/gnome-shell/extensions/gh-pr-indicator@local
 gnome-extensions enable gh-pr-indicator@local
 ```
 
