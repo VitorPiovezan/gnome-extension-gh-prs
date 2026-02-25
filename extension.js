@@ -266,6 +266,8 @@ const GhPrIndicator = GObject.registerClass(
         const reposSetting = this._settings.get_string('actions-repos').trim();
         if (!reposSetting) {
           this._addEmptyRow(t.noRepos);
+        } else if (actions === null) {
+          this._addEmptyRow(t.loading);
         } else if (actions.length === 0) {
           this._addEmptyRow(t.noRuns);
         } else {
@@ -283,8 +285,7 @@ const GhPrIndicator = GObject.registerClass(
         const toggleItem = new PopupMenu.PopupMenuItem(`\u25C9 ${toggleLabel}`, { reactive: true });
         toggleItem.connect('activate', () => {
           this._settings.set_boolean('actions-only-mine', !onlyMine);
-          this._hasCache = false;
-          this._onMenuOpen();
+          this._refreshActionsOnly();
           return true;
         });
         this.menu.addMenuItem(toggleItem);
@@ -318,6 +319,21 @@ const GhPrIndicator = GObject.registerClass(
           this._addWorkflowHeader(wf);
           grouped[repo][wf].forEach(run => this._addActionRow(run));
         });
+      });
+    }
+
+    _refreshActionsOnly() {
+      this._cachedActions = null;
+      this._renderData(this._cachedMyPrs, this._cachedReviewPrs, null);
+
+      this._fetchId++;
+      const currentFetch = this._fetchId;
+      this._fetchActions(currentFetch, (runs) => {
+        if (currentFetch !== this._fetchId) return;
+        this._cachedActions = runs;
+        if (this.menu.isOpen) {
+          this._renderData(this._cachedMyPrs, this._cachedReviewPrs, runs);
+        }
       });
     }
 
