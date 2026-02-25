@@ -1,13 +1,15 @@
-# GitHub PRs - Extensao GNOME
+# GitHub PRs - GNOME Extension
 
-Indicador no header que lista suas PRs abertas e as pendentes de revisao. Sincronizado ao abrir o menu (so PRs abertas).
+A panel indicator that lists your open pull requests and PRs pending your review. Data is fetched every time you open the menu and cached for instant display on subsequent opens.
 
-## Requisitos
+Supports **pt-BR** and **en-US** automatically based on your system language.
 
-- [GitHub CLI (gh)](https://cli.github.com/) instalado e autenticado (`gh auth login`)
+## Requirements
+
+- [GitHub CLI (gh)](https://cli.github.com/) installed and authenticated (`gh auth login`)
 - GNOME Shell 45+
 
-## Instalacao
+## Installation
 
 ```bash
 git clone https://github.com/VitorPiovezan/gnome-extension-gh-prs.git
@@ -15,22 +17,22 @@ cp -r gnome-extension-gh-prs ~/.local/share/gnome-shell/extensions/gh-pr-indicat
 gnome-extensions enable gh-pr-indicator@local
 ```
 
-Reinicie o Shell (Alt+F2, `r`) se a extensao nao aparecer.
+Restart the Shell (Alt+F2, type `r`) if the extension doesn't show up.
 
-## Configuracao
+## Configuration
 
-Opcional: crie `config.json` na pasta da extensao para mudar o caminho do `gh`:
+Optional: create a `config.json` in the extension folder to change the `gh` binary path:
 
 ```json
 {"gh-path": "/usr/bin/gh"}
 ```
 
-Use `which gh` para ver o caminho no seu sistema.
+Run `which gh` to find the path on your system.
 
-## Uso
+## Usage
 
-Clique no icone (ramo de git) no header. O menu mostra:
-- **Abertas por mim**: PRs que voce abriu (open)
-- **Pendentes de revisao**: PRs em que voce foi solicitado a revisar
+Click the branch icon in the top bar. The menu shows:
+- **Opened by me**: PRs you authored (open state)
+- **Pending review**: PRs where your review was requested
 
-Cada vez que voce abre o menu, a lista e atualizada. Clique em uma linha para abrir a PR no navegador.
+The first time you open the menu it fetches fresh data. On subsequent opens it shows the cached list instantly and refreshes in the background. Click any item to open the PR in your browser.

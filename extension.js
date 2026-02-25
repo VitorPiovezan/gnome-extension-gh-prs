@@ -8,6 +8,33 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+const I18N = {
+  'pt': {
+    opened: 'Abertas por mim',
+    review: 'Pendentes de revisao',
+    none: 'Nenhuma',
+    loading: 'Carregando...',
+    error: 'Erro ao carregar (gh auth?)',
+  },
+  'en': {
+    opened: 'Opened by me',
+    review: 'Pending review',
+    none: 'None',
+    loading: 'Loading...',
+    error: 'Failed to load (gh auth?)',
+  },
+};
+
+function getLocale() {
+  const langs = GLib.get_language_names();
+  for (const lang of langs) {
+    if (lang.startsWith('pt')) return 'pt';
+  }
+  return 'en';
+}
+
+const t = I18N[getLocale()] || I18N['en'];
+
 function loadConfig(extensionPath) {
   const path = extensionPath + '/config.json';
   const file = Gio.File.new_for_path(path);
@@ -55,6 +82,8 @@ const GhPrIndicator = GObject.registerClass(
       this._cachedReviewPrs = [];
       this._hasCache = false;
       this._fetchId = 0;
+
+      this.style = 'padding: 0 4px;';
 
       const icon = new St.Icon({
         icon_name: 'git-branch-symbolic',
@@ -111,9 +140,9 @@ const GhPrIndicator = GObject.registerClass(
     _renderData(myPrs, reviewPrs) {
       this._clearDynamic();
 
-      this._addSection('Abertas por mim');
+      this._addSection(t.opened);
       if (myPrs.length === 0) {
-        const none = new PopupMenu.PopupMenuItem('Nenhuma', { reactive: false });
+        const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
         this.menu.addMenuItem(none);
         this._dynamicItems.push(none);
       } else {
@@ -124,9 +153,9 @@ const GhPrIndicator = GObject.registerClass(
       this.menu.addMenuItem(sep);
       this._dynamicItems.push(sep);
 
-      this._addSection('Pendentes de revisao');
+      this._addSection(t.review);
       if (reviewPrs.length === 0) {
-        const none = new PopupMenu.PopupMenuItem('Nenhuma', { reactive: false });
+        const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
         this.menu.addMenuItem(none);
         this._dynamicItems.push(none);
       } else {
@@ -139,7 +168,7 @@ const GhPrIndicator = GObject.registerClass(
         this._renderData(this._cachedMyPrs, this._cachedReviewPrs);
       } else {
         this._clearDynamic();
-        this._addSection('Carregando...');
+        this._addSection(t.loading);
       }
 
       this._fetchInBackground();
