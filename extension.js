@@ -20,6 +20,8 @@ const I18N = {
     refresh: 'Atualizar',
     onlyMine: 'Somente minhas',
     allActions: 'Todas as actions',
+    now: 'agora',
+    steps: 'steps',
   },
   'en': {
     opened: 'Opened by me',
@@ -32,6 +34,8 @@ const I18N = {
     refresh: 'Refresh',
     onlyMine: 'Only mine',
     allActions: 'All actions',
+    now: 'now',
+    steps: 'steps',
   },
 };
 
@@ -44,6 +48,17 @@ function getLocale() {
 }
 
 const t = I18N[getLocale()] || I18N['en'];
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return t.now;
+  if (mins < 60) return `${mins}min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
 
 function runGhAsync(ghPath, args, callback) {
   const argv = [ghPath, ...args];
@@ -67,7 +82,17 @@ function runGhAsync(ghPath, args, callback) {
 
 function parseJson(stdout) {
   if (!stdout || !stdout.trim()) return [];
-  try { return JSON.parse(stdout.trim()); } catch (_) { return []; }
+  try {
+    const parsed = JSON.parse(stdout.trim());
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function parseJsonObj(stdout) {
+  if (!stdout || !stdout.trim()) return null;
+  try { return JSON.parse(stdout.trim()); } catch (_) { return null; }
 }
 
 function getStatusColor(run) {
@@ -80,6 +105,9 @@ function getStatusColor(run) {
   }
   return '#9e9e9e';
 }
+
+const RUN_JQ = '[.workflow_runs[] | {status, conclusion, displayTitle: .display_title, createdAt: .created_at, url: .html_url, workflowName: .name, actor: .actor.login, runId: .id}]';
+const JOBS_JQ = '{ steps_total: ([.jobs[].steps[]] | length), steps_done: ([.jobs[].steps[] | select(.status == "completed")] | length) }';
 
 const GhPrIndicator = GObject.registerClass(
   class GhPrIndicator extends PanelMenu.Button {
@@ -210,19 +238,33 @@ const GhPrIndicator = GObject.registerClass(
     }
 
     _addActionRow(run) {
+      const onlyMine = this._settings.get_boolean('actions-only-mine');
       const item = new PopupMenu.PopupBaseMenuItem({ reactive: true });
-      const box = new St.BoxLayout({ vertical: false, x_expand: true });
+      const box = new St.BoxLayout({ vertical: true, x_expand: true });
 
+      const titleBox = new St.BoxLayout({ vertical: false });
       const dot = new St.Label({ text: '  \u25CF ' });
       dot.set_style(`color: ${getStatusColor(run)};`);
-      box.add_child(dot);
+      titleBox.add_child(dot);
 
       const maxChar = Math.floor(this._settings.get_int('menu-width') / 7.5) - 6;
       const titleText = (run.displayTitle || '').trim();
       const shortTitle = titleText.length > maxChar
         ? titleText.substring(0, maxChar - 3) + '...'
         : titleText;
-      box.add_child(new St.Label({ text: shortTitle, x_expand: true }));
+      titleBox.add_child(new St.Label({ text: shortTitle, x_expand: true }));
+      box.add_child(titleBox);
+
+      const parts = [timeAgo(run.createdAt)];
+      if (run.stepsTotal != null) {
+        parts.push(`${run.stepsDone}/${run.stepsTotal} ${t.steps}`);
+      }
+      if (!onlyMine && run.actor) {
+        parts.push(run.actor);
+      }
+      const subLabel = new St.Label({ text: `    ${parts.join(' \u00B7 ')}` });
+      subLabel.set_style('font-size: 0.8em; color: #888;');
+      box.add_child(subLabel);
 
       item.add_child(box);
       item.connect('activate', () => {
@@ -444,14 +486,10 @@ const GhPrIndicator = GObject.registerClass(
         let allRuns = [];
 
         repos.forEach(repo => {
-          const args = [
-            'run', 'list', '-R', repo,
-            '--json', 'status,conclusion,displayTitle,createdAt,url,workflowName',
-            '--limit', '200',
-          ];
-          if (onlyMine && username) args.push('--user', username);
+          let apiUrl = `repos/${repo}/actions/runs?per_page=100`;
+          if (onlyMine && username) apiUrl += `&actor=${username}`;
 
-          runGhAsync(ghPath, args, (stdout) => {
+          runGhAsync(ghPath, ['api', apiUrl, '--jq', RUN_JQ], (stdout) => {
             const runs = parseJson(stdout);
             const filtered = runs
               .filter(r => new Date(r.createdAt) >= cutoff)
@@ -468,7 +506,8 @@ const GhPrIndicator = GObject.registerClass(
 
             if (pending === 0) {
               allRuns.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-              callback(allRuns.slice(0, maxDisplay));
+              const visible = allRuns.slice(0, maxDisplay);
+              this._fetchJobsForRuns(ghPath, visible, currentFetch, callback);
             }
           });
         });
@@ -479,6 +518,29 @@ const GhPrIndicator = GObject.registerClass(
       } else {
         doFetch(null);
       }
+    }
+
+    _fetchJobsForRuns(ghPath, runs, currentFetch, callback) {
+      if (runs.length === 0) {
+        callback(runs);
+        return;
+      }
+
+      let pending = runs.length;
+
+      runs.forEach(run => {
+        const apiUrl = `repos/${run.repo}/actions/runs/${run.runId}/jobs`;
+        runGhAsync(ghPath, ['api', apiUrl, '--jq', JOBS_JQ], (stdout) => {
+          if (currentFetch !== this._fetchId) return;
+          const data = parseJsonObj(stdout);
+          if (data) {
+            run.stepsTotal = data.steps_total || 0;
+            run.stepsDone = data.steps_done || 0;
+          }
+          pending--;
+          if (pending === 0) callback(runs);
+        });
+      });
     }
   }
 );
