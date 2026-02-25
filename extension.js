@@ -35,19 +35,6 @@ function getLocale() {
 
 const t = I18N[getLocale()] || I18N['en'];
 
-function loadConfig(extensionPath) {
-  const path = extensionPath + '/config.json';
-  const file = Gio.File.new_for_path(path);
-  if (!file.query_exists(null)) return { ghPath: '/usr/bin/gh' };
-  const [, data] = file.load_contents(null);
-  try {
-    const o = JSON.parse(new TextDecoder().decode(data));
-    return { ghPath: (o['gh-path'] || o.ghPath || '/usr/bin/gh').trim() };
-  } catch (_) {
-    return { ghPath: '/usr/bin/gh' };
-  }
-}
-
 function runGhAsync(ghPath, args, callback) {
   const argv = [ghPath, ...args];
   try {
@@ -75,13 +62,14 @@ function parseJson(stdout) {
 
 const GhPrIndicator = GObject.registerClass(
   class GhPrIndicator extends PanelMenu.Button {
-    _init(config) {
+    _init(settings) {
       super._init(0.0, 'GitHub PRs');
-      this._ghPath = config.ghPath;
+      this._settings = settings;
       this._cachedMyPrs = [];
       this._cachedReviewPrs = [];
       this._hasCache = false;
       this._fetchId = 0;
+      this._signalIds = [];
 
       this.style = 'padding: 0 4px;';
 
@@ -96,10 +84,22 @@ const GhPrIndicator = GObject.registerClass(
       this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
       this._dynamicItems = [];
+      this._applyMenuWidth();
 
       this._menuOpenId = this.menu.connect('open-state-changed', (_menu, isOpen) => {
         if (isOpen) this._onMenuOpen();
       });
+
+      this._signalIds.push(
+        this._settings.connect('changed::menu-width', () => this._applyMenuWidth()),
+        this._settings.connect('changed::show-my-prs', () => { this._hasCache = false; }),
+        this._settings.connect('changed::show-review-prs', () => { this._hasCache = false; }),
+      );
+    }
+
+    _applyMenuWidth() {
+      const width = this._settings.get_int('menu-width');
+      this.menu.box.style = `width: ${width}px;`;
     }
 
     destroy() {
@@ -107,6 +107,8 @@ const GhPrIndicator = GObject.registerClass(
         this.menu.disconnect(this._menuOpenId);
         this._menuOpenId = null;
       }
+      this._signalIds.forEach(id => this._settings.disconnect(id));
+      this._signalIds = [];
       super.destroy();
     }
 
@@ -123,11 +125,12 @@ const GhPrIndicator = GObject.registerClass(
     }
 
     _addPrRow(pr) {
+      const maxChar = Math.floor(this._settings.get_int('menu-width') / 7.5);
       let repo = '';
       if (pr.repository && pr.repository.nameWithOwner) repo = pr.repository.nameWithOwner + '#';
       else if (pr.headRepository && pr.headRepository.nameWithOwner) repo = pr.headRepository.nameWithOwner + '#';
       const label = (repo ? repo + pr.number + ' ' : '') + (pr.title || '').trim() || '#' + pr.number;
-      const short = label.length > 58 ? label.substring(0, 55) + '...' : label;
+      const short = label.length > maxChar ? label.substring(0, maxChar - 3) + '...' : label;
       const item = new PopupMenu.PopupMenuItem(short, { reactive: true });
       item._url = pr.url;
       item.connect('activate', () => {
@@ -139,31 +142,45 @@ const GhPrIndicator = GObject.registerClass(
 
     _renderData(myPrs, reviewPrs) {
       this._clearDynamic();
+      const showMy = this._settings.get_boolean('show-my-prs');
+      const showReview = this._settings.get_boolean('show-review-prs');
 
-      this._addSection(t.opened);
-      if (myPrs.length === 0) {
-        const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
-        this.menu.addMenuItem(none);
-        this._dynamicItems.push(none);
-      } else {
-        myPrs.forEach(pr => this._addPrRow(pr));
+      if (showMy) {
+        this._addSection(t.opened);
+        if (myPrs.length === 0) {
+          const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
+          this.menu.addMenuItem(none);
+          this._dynamicItems.push(none);
+        } else {
+          myPrs.forEach(pr => this._addPrRow(pr));
+        }
       }
 
-      const sep = new PopupMenu.PopupSeparatorMenuItem();
-      this.menu.addMenuItem(sep);
-      this._dynamicItems.push(sep);
+      if (showMy && showReview) {
+        const sep = new PopupMenu.PopupSeparatorMenuItem();
+        this.menu.addMenuItem(sep);
+        this._dynamicItems.push(sep);
+      }
 
-      this._addSection(t.review);
-      if (reviewPrs.length === 0) {
-        const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
-        this.menu.addMenuItem(none);
-        this._dynamicItems.push(none);
-      } else {
-        reviewPrs.forEach(pr => this._addPrRow(pr));
+      if (showReview) {
+        this._addSection(t.review);
+        if (reviewPrs.length === 0) {
+          const none = new PopupMenu.PopupMenuItem(t.none, { reactive: false });
+          this.menu.addMenuItem(none);
+          this._dynamicItems.push(none);
+        } else {
+          reviewPrs.forEach(pr => this._addPrRow(pr));
+        }
+      }
+
+      if (!showMy && !showReview) {
+        this._addSection(t.none);
       }
     }
 
     _onMenuOpen() {
+      this._applyMenuWidth();
+
       if (this._hasCache) {
         this._renderData(this._cachedMyPrs, this._cachedReviewPrs);
       } else {
@@ -177,8 +194,13 @@ const GhPrIndicator = GObject.registerClass(
     _fetchInBackground() {
       this._fetchId++;
       const currentFetch = this._fetchId;
-      let myPrs = null;
-      let reviewPrs = null;
+      const ghPath = this._settings.get_string('gh-path');
+      const limit = this._settings.get_int('max-items').toString();
+      const showMy = this._settings.get_boolean('show-my-prs');
+      const showReview = this._settings.get_boolean('show-review-prs');
+
+      let myPrs = showMy ? null : [];
+      let reviewPrs = showReview ? null : [];
 
       const tryUpdate = () => {
         if (myPrs === null || reviewPrs === null) return;
@@ -193,15 +215,23 @@ const GhPrIndicator = GObject.registerClass(
         }
       };
 
-      runGhAsync(this._ghPath, ['search', 'prs', '--author=@me', '--state=open', '--json', 'number,title,url,repository', '--limit', '50'], (stdout) => {
-        myPrs = parseJson(stdout);
-        tryUpdate();
-      });
+      if (showMy) {
+        runGhAsync(ghPath, ['search', 'prs', '--author=@me', '--state=open', '--json', 'number,title,url,repository', '--limit', limit], (stdout) => {
+          myPrs = parseJson(stdout);
+          tryUpdate();
+        });
+      }
 
-      runGhAsync(this._ghPath, ['search', 'prs', '--review-requested=@me', '--state=open', '--json', 'number,title,url,repository', '--limit', '50'], (stdout) => {
-        reviewPrs = parseJson(stdout);
+      if (showReview) {
+        runGhAsync(ghPath, ['search', 'prs', '--review-requested=@me', '--state=open', '--json', 'number,title,url,repository', '--limit', limit], (stdout) => {
+          reviewPrs = parseJson(stdout);
+          tryUpdate();
+        });
+      }
+
+      if (!showMy && !showReview) {
         tryUpdate();
-      });
+      }
     }
   }
 );
@@ -210,8 +240,8 @@ let _indicator = null;
 
 export default class GhPrIndicatorExtension extends Extension {
   enable() {
-    const config = loadConfig(this.path);
-    _indicator = new GhPrIndicator(config);
+    const settings = this.getSettings();
+    _indicator = new GhPrIndicator(settings);
     Main.panel.addToStatusArea(this.uuid, _indicator, 0, 'right');
   }
 

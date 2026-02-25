@@ -2,7 +2,8 @@
   "name": "GitHub PRs",
   "description": "Panel indicator showing your open PRs and PRs pending your review",
   "uuid": "gh-pr-indicator@local",
-  "version": 1,
+  "version": 2,
   "shell-version": ["45", "46", "46.0", "47"],
-  "url": "https://github.com/VitorPiovezan/gnome-extension-gh-prs"
+  "url": "https://github.com/VitorPiovezan/gnome-extension-gh-prs",
+  "settings-schema": "org.gnome.shell.extensions.gh-pr-indicator"
 }

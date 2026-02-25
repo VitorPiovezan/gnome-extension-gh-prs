@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gh-pr-indicator"
+          path="/org/gnome/shell/extensions/gh-pr-indicator/">
+
+    <key name="show-my-prs" type="b">
+      <default>true</default>
+      <summary>Show PRs opened by me</summary>
+    </key>
+
+    <key name="show-review-prs" type="b">
+      <default>true</default>
+      <summary>Show PRs pending my review</summary>
+    </key>
+
+    <key name="menu-width" type="i">
+      <default>400</default>
+      <range min="250" max="800"/>
+      <summary>Menu width in pixels</summary>
+    </key>
+
+    <key name="gh-path" type="s">
+      <default>'/usr/bin/gh'</default>
+      <summary>Path to the gh CLI binary</summary>
+    </key>
+
+    <key name="max-items" type="i">
+      <default>25</default>
+      <range min="5" max="50"/>
+      <summary>Maximum number of PRs to fetch per section</summary>
+    </key>
+
+  </schema>
+</schemalist>
