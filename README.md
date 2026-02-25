@@ -4,6 +4,9 @@ A panel indicator that lists your open pull requests and PRs pending your review
 
 Supports **pt-BR** and **en-US** automatically based on your system language.
 
+<img width="542" height="334" alt="image" src="https://github.com/user-attachments/assets/529c0d85-939a-4bd4-966b-caeacf480c26" />
+
+
 ## Requirements
 
 - [GitHub CLI (gh)](https://cli.github.com/) installed and authenticated (`gh auth login`)
